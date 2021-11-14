@@ -1,0 +1,32 @@
+{
+  "name": "todowebapp",
+  "version": "1.0.0",
+  "description": "A web application based on the to-do list project from Launch School",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Del-on-git/todoWebApp.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Del-on-git/todoWebApp/issues"
+  },
+  "homepage": "https://github.com/Del-on-git/todoWebApp#readme",
+  "dependencies": {
+    "connect-loki": "^1.2.0",
+    "express": "^4.17.1",
+    "express-flash": "^0.0.2",
+    "express-session": "^1.17.2",
+    "express-validator": "^6.13.0",
+    "morgan": "^1.10.0",
+    "pug": "^3.0.2"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.15"
+  }
+}
