@@ -4,6 +4,7 @@
   "description": "A web application based on the to-do list project from Launch School",
   "main": "index.js",
   "scripts": {
+    "start": "npx nodemon lists.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
