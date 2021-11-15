@@ -9,6 +9,8 @@ const store = require('connect-loki');
 
 const app = express();
 
+let todoLists = require('./lib/seed-data');
+
 app.set('view engine', 'pug');
 app.set('views', './views');
 
