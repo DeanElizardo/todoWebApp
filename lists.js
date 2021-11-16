@@ -10,15 +10,24 @@ const store = require('connect-loki');
 let todoLists = require('./lib/seed-data');
 const sortToDoList = list => {
   return list.slice().sort((todoListA, todoListB) => {
-    let titleA = todoListA.title;
-    let titleB = todoListB.title;
+    let isDoneA = todoListA.isDone();
+    let isDoneB = todoListB.isDone();
 
-    if (titleA < titleB) { //put titleA first
+    if (!isDoneA && isDoneB) {
       return -1;
-    } else if (titleA > titleB) { //put titleB first
+    } else if (isDoneA && !isDoneB) {
       return 1;
     } else {
-      return 0; //retain original order
+      let titleA = todoListA.title;
+      let titleB = todoListB.title;
+
+      if (titleA < titleB) { //put titleA first
+        return -1;
+      } else if (titleA > titleB) { //put titleB first
+        return 1;
+      } else {
+        return 0; //retain original order
+      }
     }
   });
 }
