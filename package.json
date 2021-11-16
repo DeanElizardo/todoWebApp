@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "npx nodemon lists.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node ./lib/seed-data.js"
   },
   "repository": {
     "type": "git",
