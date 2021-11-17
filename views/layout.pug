@@ -15,4 +15,10 @@ html(lang="en-US")
       block headerLinks 
 
     main 
+      if errorMessages
+        ul
+          each error in errorMessages
+            .flash.error 
+              li= error 
+
       block mainBlock
