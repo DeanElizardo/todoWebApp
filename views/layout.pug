@@ -15,10 +15,11 @@ html(lang="en-US")
       block headerLinks 
 
     main 
-      if errorMessages
+      - let errorTypes = Object.keys(flash || {})
+      if errorTypes.length > 0
         ul
-          each error in errorMessages
-            .flash.error 
-              li= error 
+          each error in errorTypes 
+            each message in flash[error]
+              li.flash(class=error)= message 
 
       block mainBlock

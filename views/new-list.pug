@@ -1,7 +1,7 @@
 extends layout
 
 block mainBlock 
-  
+
   form(action="/lists" method="post")
     dl 
       dt 
@@ -10,7 +10,8 @@ block mainBlock
         input(type="text"
               id="todoListTitle"
               name="todoListTitle"
-              placeholder="List Title")
+              placeholder="List Title"
+              value=todoListTitle)
 
     fieldset.actions 
       input(type="submit" value="Save")
