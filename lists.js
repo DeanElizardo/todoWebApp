@@ -30,30 +30,45 @@ const sortToDoList = list => {
   return sortList(notDone).concat(sortList(done));
 }
 
-const checkDuplicateTitles = function (title, lists) {
-  return lists.some(list => list.title.toLowerCase() === title.toLowerCase());
-}
-
 const app = express();
+const LokiStore = store(session);
 
 app.set('view engine', 'pug');
 app.set('views', './views');
 
 app.use(morgan("dev")); //change "dev" -> "common" after completing development
-// app.use(session()); //apply cookie properties here
+app.use(session({
+  cookie: {
+    httpOnly: true,
+    maxAge: 31 * 24 * 60 * 60 * 1000,
+    path: "/",
+    secure: false
+  },
+  name: "Launch-school-toDo-web-app",
+  resave: false,
+  saveUninitialized:true,
+  secret: "Here's an insecure secret that should have been generated elsewhere and interpolated",
+  store: new LokiStore({}),
+}));
 app.use(express.static('public'));
 app.use(express.urlencoded( { extended: false }));
+app.use(flash());
+app.use((req, res, next) => {
+  res.locals.flash = req.session.flash;
+  delete req.session.flash;
+  next();
+});
 
 app.get('/', (req, res) => {
   res.redirect('/lists');
 });
 app.get('/lists', (req, res) => {
-  res.render('lists', { 
+  res.render('lists', {
     todoLists: sortToDoList(todoLists),
   });
 });
 app.get('/lists/new', (req, res) => {
-  res.render('new-list');
+  res.render('new-list', { todoListTitle: "" });
 });
 
 app.post('/lists',
@@ -66,32 +81,31 @@ app.post('/lists',
       .isLength({ max: 100 })
       .withMessage("Title must not be longer than 100 characters")
       .bail()
+      .custom(title => {
+        let duplicate = todoLists.find(list => list.title === title);
+        return duplicate === undefined;
+      })
+      .withMessage("List title must be unique.")
   ],
   (req, res, next) => {
     const errors = validationResult(req);
-    res.locals.errors = [];
     if (!errors.isEmpty()) {
-      res.locals.errors = errors.errors.map(error => error.msg);
-    }
-
-    next();
-  },
-  (req, res, next) => {
-    if (checkDuplicateTitles(req.body.todoListTitle, todoLists)) {
-      res.locals.errors.push("A ToDo list with that title already exists");
+      errors.errors.forEach(error => req.flash("error", error.msg));
     }
 
     next();
   },
   (req, res) => {
     let title = req.body.todoListTitle;
-    if (res.locals.errors.length > 0) {
+    if (req.session.flash) {
       res.render('new-list', {
-        errorMessages: res.locals.errors,
+        flash: req.session.flash,
+        todoListTitle: title,
       });
     } else {
       todoLists.push(new ToDoList(title));
-      res.redirect("/");
+      req.flash("Success", "New list added");
+      res.redirect("/lists");
     }
 });
 
