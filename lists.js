@@ -9,6 +9,7 @@ const store = require('connect-loki');
 
 let todoLists = require('./lib/seed-data');
 const ToDoList = require('./lib/todolist');
+const ToDo = require('./lib/todo');
 const sortList = list => {
   return list.slice().sort((todoListA, todoListB) => {
     let titleA = todoListA.title.toLowerCase();
@@ -70,6 +71,14 @@ app.get('/lists', (req, res) => {
 app.get('/lists/new', (req, res) => {
   res.render('new-list', { todoListTitle: "" });
 });
+app.get('/lists/:id', (req, res) => {
+  let targetList = todoLists.find(list => list.id === Number(req.params.id));
+  console.log(targetList)
+  res.render('manage-list', {
+    todoList: targetList,
+    todos: targetList.todos,
+  });
+});
 
 app.post('/lists',
   [
@@ -107,6 +116,59 @@ app.post('/lists',
       req.flash("Success", "New list added");
       res.redirect("/lists");
     }
+});
+app.post('/lists/:id/todos',
+  [
+    body('todoTitle')
+      .trim()
+      .isLength({ min: 1, max: 100 })
+      .withMessage("New item must be between 1 and 100 characters")
+      .bail()
+      // FIGURE OUT HOW TO DEAL WITH DUPLICATE ENTRIES IN LIST; HAS TO DO WITH ACCESSING
+      // THE ITEM'S NAME. CAN'T BE DONE THROUGH req.
+      // .custom(item => {
+      //   let targetList = todoLists.find(list => list.id === Number(req.params.id));
+      //   let duplicate = targetList.findByTitle(req.body.newTodo);
+
+      //   return duplicate === undefined;
+      // })
+  ],
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      errors.errors.forEach(error => req.flash("error", error.msg));
+    }
+
+    next();
+  },
+  (req, res) => {
+    let targetList = todoLists.find(list => list.id === Number(req.params.id));
+    if (req.session.flash) {
+      res.render('manage-list', {
+        todoList: targetList,
+        flash: req.session.flash,
+      });
+    } else {
+      targetList.addToDo(req.body.todoTitle);
+      res.render('manage-list', {
+        todoList: targetList,
+        todos: targetList.todos,
+      });
+    }
+  }
+);
+
+app.post('/lists/:listID/todos/:todoID/toggle', (req, res) => {
+  let targetList = todoLists.find(list => list.id.toString() === req.params.listID);
+  let todo = targetList.todos.find(item => item.id.toString() === req.params.todoID);
+
+  if (todo.isDone()) {
+    todo.markNotDone();
+  } else {
+    todo.markDone();
+  }
+
+  res.redirect(`/lists/${req.params.listID}`);
 });
 
 app.listen(PORT, HOST, () => {
