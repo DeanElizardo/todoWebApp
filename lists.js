@@ -24,11 +24,20 @@ const sortList = list => {
     }
   });
 }
+
 const sortToDoList = list => {
   let done = list.filter(item => item.isDone());
   let notDone = list.filter(item => !item.isDone());
 
   return sortList(notDone).concat(sortList(done));
+}
+
+function getTargetList(listID) {
+  return todoLists.find(list => list.id.toString() === listID);
+}
+
+function getTargetItem(todoID) {
+  return getTargetList(todoID);
 }
 
 const app = express();
@@ -59,27 +68,29 @@ app.use((req, res, next) => {
   delete req.session.flash;
   next();
 });
-
+//=================================================================================GET
 app.get('/', (req, res) => {
   res.redirect('/lists');
 });
+
 app.get('/lists', (req, res) => {
   res.render('lists', {
     todoLists: sortToDoList(todoLists),
   });
 });
+
 app.get('/lists/new', (req, res) => {
   res.render('new-list', { todoListTitle: "" });
 });
+
 app.get('/lists/:id', (req, res) => {
-  let targetList = todoLists.find(list => list.id === Number(req.params.id));
-  console.log(targetList)
+  let targetList = getTargetList(req.params.id);
   res.render('manage-list', {
     todoList: targetList,
     todos: targetList.todos,
   });
 });
-
+//================================================================================POST
 app.post('/lists',
   [
     body("todoListTitle")
@@ -117,6 +128,7 @@ app.post('/lists',
       res.redirect("/lists");
     }
 });
+
 app.post('/lists/:id/todos',
   [
     body('todoTitle')
@@ -142,7 +154,7 @@ app.post('/lists/:id/todos',
     next();
   },
   (req, res) => {
-    let targetList = todoLists.find(list => list.id === Number(req.params.id));
+    let targetList = getTargetList(req.params.id);
     if (req.session.flash) {
       res.render('manage-list', {
         todoList: targetList,
@@ -159,14 +171,32 @@ app.post('/lists/:id/todos',
 );
 
 app.post('/lists/:listID/todos/:todoID/toggle', (req, res) => {
-  let targetList = todoLists.find(list => list.id.toString() === req.params.listID);
-  let todo = targetList.todos.find(item => item.id.toString() === req.params.todoID);
+  let targetList = getTargetList(req.params.listID);
+  let targetTodo = targetList.findById(Number(req.params.todoID));
 
-  if (todo.isDone()) {
-    todo.markNotDone();
+  if (targetTodo.isDone()) {
+    targetTodo.markNotDone();
   } else {
-    todo.markDone();
+    targetTodo.markDone();
   }
+
+  res.redirect(`/lists/${req.params.listID}`);
+});
+
+app.post('/lists/:listID/complete_all', (req, res) => {
+  let targetList = getTargetList(req.params.listID);
+
+  targetList.markAllDone();
+
+  res.redirect(`/lists/${req.params.listID}`);
+});
+
+app.post('/lists/:listID/todos/:todoID/destroy', (req, res) => {
+  let targetList = getTargetList(req.params.listID);
+  let targetTodo = targetList.findById(Number(req.params.todoID));
+  let todoIndex = targetList.findIndexOf(targetTodo);
+
+  targetList.removeAt(todoIndex);
 
   res.redirect(`/lists/${req.params.listID}`);
 });
