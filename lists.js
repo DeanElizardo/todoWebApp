@@ -7,9 +7,9 @@ const { body, validationResult } = require('express-validator');
 const morgan = require('morgan');
 const store = require('connect-loki');
 
-let todoLists = require('./lib/seed-data');
 const ToDoList = require('./lib/todolist');
 const ToDo = require('./lib/todo');
+let todoLists = require('./lib/seed-data');
 const sortList = list => {
   return list.slice().sort((todoListA, todoListB) => {
     let titleA = todoListA.title.toLowerCase();
@@ -68,7 +68,7 @@ app.use((req, res, next) => {
   delete req.session.flash;
   next();
 });
-//=================================================================================GET
+//==========================================================================GET
 app.get('/', (req, res) => {
   res.redirect('/lists');
 });
@@ -90,7 +90,14 @@ app.get('/lists/:id', (req, res) => {
     todos: targetList.todos,
   });
 });
-//================================================================================POST
+
+app.get('/lists/:listID/edit', (req, res) => {
+  let targetList = getTargetList(req.params.listID);
+  res.render('edit-list', {
+    todoList: targetList,
+  });
+});
+//=========================================================================POST
 app.post('/lists',
   [
     body("todoListTitle")
@@ -102,7 +109,9 @@ app.post('/lists',
       .withMessage("Title must not be longer than 100 characters")
       .bail()
       .custom(title => {
-        let duplicate = todoLists.find(list => list.title === title);
+        let characters = title.slice().toLowerCase();
+        let duplicate = todoLists
+              .find(list => list.title.toLowerCase() === characters);
         return duplicate === undefined;
       })
       .withMessage("List title must be unique.")
@@ -136,14 +145,6 @@ app.post('/lists/:id/todos',
       .isLength({ min: 1, max: 100 })
       .withMessage("New item must be between 1 and 100 characters")
       .bail()
-      // FIGURE OUT HOW TO DEAL WITH DUPLICATE ENTRIES IN LIST; HAS TO DO WITH ACCESSING
-      // THE ITEM'S NAME. CAN'T BE DONE THROUGH req.
-      // .custom(item => {
-      //   let targetList = todoLists.find(list => list.id === Number(req.params.id));
-      //   let duplicate = targetList.findByTitle(req.body.newTodo);
-
-      //   return duplicate === undefined;
-      // })
   ],
   (req, res, next) => {
     const errors = validationResult(req);
@@ -189,6 +190,56 @@ app.post('/lists/:listID/complete_all', (req, res) => {
   targetList.markAllDone();
 
   res.redirect(`/lists/${req.params.listID}`);
+});
+
+app.post('/lists/:listID/edit',
+  [
+    body("todoListTitle")
+      .trim()
+      .isLength({ min: 1 })
+      .withMessage("Title must not be empty")
+      .bail()
+      .isLength({ max: 100 })
+      .withMessage("Title must not be longer than 100 characters")
+      .bail()
+      .custom(title => {
+        let characters = title.slice().toLowerCase();
+        let duplicate = todoLists
+              .find(list => list.title.toLowerCase() === characters);
+        return duplicate === undefined;
+      })
+      .withMessage("List title must be unique.")
+  ],
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      errors.errors.forEach(error => req.flash("error", error.msg));
+    }
+
+    next();
+  },
+  (req, res) => {
+    let targetList = getTargetList(req.params.listID);
+    if (req.session.flash) {
+      res.render('edit-list', {
+        flash: req.session.flash,
+        todoList: targetList
+      });
+    } else {
+      let targetList = getTargetList(req.params.listID);
+      targetList.setTitle(req.body.todoListTitle);
+      req.flash("Success", "List edited");
+      res.redirect("/lists");
+    }
+  }
+);
+
+app.post('/lists/:listID/destroy', (req, res) => {
+  let targetList = getTargetList(req.params.listID);
+  let removalIdx = todoLists.indexOf(targetList);
+  todoLists.splice(removalIdx, 1);
+
+  res.redirect('/lists');
 });
 
 app.post('/lists/:listID/todos/:todoID/destroy', (req, res) => {
