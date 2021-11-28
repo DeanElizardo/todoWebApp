@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "clear && npx nodemon lists.js",
+    "debug": "clear && npx nodemon --inspect=0.0.0.0:9229 lists.js",
     "test": "node ./lib/seed-data.js"
   },
   "repository": {
