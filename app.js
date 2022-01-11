@@ -10,9 +10,6 @@ const morgan = require('morgan');
 const session = require('express-session');
 const store = require('connect-loki');
 const { SessionPersistence } = require('./lib/SessionPersistence');
-const ToDoList = require('./lib/todolist');
-const ToDo = require('./lib/todo');
-// let SeedData = require('./lib/seed-data'); //!temporary code
 
 //====================================================================APP LOGIC
 const app = express();
