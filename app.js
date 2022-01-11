@@ -4,42 +4,15 @@ const PORT = 3000;
 
 //======================================================================MODULES
 const express = require('express');
-const session = require('express-session');
 const flash = require('express-flash');
 const { body, validationResult } = require('express-validator');
 const morgan = require('morgan');
+const session = require('express-session');
 const store = require('connect-loki');
-
+const { SessionPersistence } = require('./lib/SessionPersistence');
 const ToDoList = require('./lib/todolist');
 const ToDo = require('./lib/todo');
-//let todoLists = require('./lib/seed-data'); //testing seed data
-
-//=============================================================HELPER FUNCTIONS
-const sortList = list => {
-  return list.slice().sort((todoListA, todoListB) => {
-    let titleA = todoListA.title.toLowerCase();
-    let titleB = todoListB.title.toLowerCase();
-
-    if (titleA < titleB) { //put titleA first
-      return -1;
-    } else if (titleA > titleB) { //put titleB first
-      return 1;
-    } else {
-      return 0; //retain original order
-    }
-  });
-}
-
-const sortToDoList = list => {
-  let done = list.filter(item => item.isDone());
-  let notDone = list.filter(item => !item.isDone());
-
-  return sortList(notDone).concat(sortList(done));
-}
-
-function getTargetList(todoLists, listID) {
-  return todoLists.find(list => list.id.toString() === listID);
-}
+// let SeedData = require('./lib/seed-data'); //!temporary code
 
 //====================================================================APP LOGIC
 const app = express();
@@ -49,7 +22,7 @@ app.set('view engine', 'pug');
 app.set('views', './views');
 
 //============================================================GLOBAL MIDDLEWARE
-app.use(morgan("dev"));
+app.use(morgan("dev")); //!Switch to "common" when done with project
 app.use(session({
   cookie: {
     httpOnly: true,
@@ -66,16 +39,9 @@ app.use(session({
 app.use(express.static('public'));
 app.use(express.urlencoded({ extended: false }));
 app.use(flash());
+//Create a new datastore
 app.use((req, res, next) => {
-  let todoLists = [];
-  if ("todoLists" in req.session) {
-    req.session.todoLists.forEach(todoList => {
-      todoLists.push(ToDoList.makeTodoList(todoList));
-    });
-  }
-
-  req.session.todoLists = todoLists;
-
+  res.locals.store = new SessionPersistence(req.session);
   next();
 });
 app.use((req, res, next) => {
@@ -90,8 +56,18 @@ app.get('/', (req, res) => {
 });
 
 app.get('/lists', (req, res) => {
+  let store = res.locals.store;
+  let todoLists = store.sortToDoLists();
+
+  let todosInfo = todoLists.map(todoList => ({
+    countAllTodos: todoList.todos.length,
+    countDoneTodos: todoList.todos.filter(todo => todo.done).length,
+    isDone: store.isDoneTodoList(todoList),
+  }));
+
   res.render('lists', {
-    todoLists: sortToDoList(req.session.todoLists),
+    todoLists,
+    todosInfo,
   });
 });
 
@@ -100,17 +76,27 @@ app.get('/lists/new', (req, res) => {
 });
 
 app.get('/lists/:id', (req, res) => {
-  let targetList = getTargetList(req.session.todoLists, req.params.id);
+  let store = res.locals.store;
+  let todoList = store.getTargetList(req.params.id);
+  let todos = store.sortTodos(todoList.todos);
+  let todoInfo = {
+    isDone: store.isDoneTodoList(todoList),
+    size: todos.length
+  }
+
   res.render('manage-list', {
-    todoList: targetList,
-    todos: targetList.todos,
+    todoList,
+    todos,
+    todoInfo
   });
 });
 
 app.get('/lists/:listID/edit', (req, res) => {
-  let targetList = getTargetList(req.session.todoLists, req.params.listID);
+  let store = res.locals.store;
+  let { listID } = req.params;
+  let todoList = store.getTargetList(listID);
   res.render('edit-list', {
-    todoList: targetList,
+    todoList,
   });
 });
 
@@ -124,14 +110,6 @@ app.post('/lists',
       .bail()
       .isLength({ max: 100 })
       .withMessage("Title must not be longer than 100 characters")
-      .bail()
-      .custom((title, { req }) => {
-        let duplicate = req.session.todoLists
-                .find(todo => todo.title.toLowerCase() === title.toLowerCase());
-
-        return duplicate === undefined;
-      })
-      .withMessage("Title must be unique")
   ],
   (req, res, next) => {
     const errors = validationResult(req);
@@ -142,6 +120,7 @@ app.post('/lists',
     next();
   },
   (req, res) => {
+    let store = res.locals.store; 
     let title = req.body.todoListTitle;
     if (req.session.flash) {
       res.render('new-list', {
@@ -149,7 +128,7 @@ app.post('/lists',
         todoListTitle: title,
       });
     } else {
-      req.session.todoLists.push(new ToDoList(title));
+      store.addTodoList(title);
       req.flash("Success", "New list added");
       res.redirect("/lists");
     }
@@ -172,41 +151,52 @@ app.post('/lists/:id/todos',
     next();
   },
   (req, res) => {
-    let targetList = getTargetList(req.session.todoLists, req.params.id);
+    let store = res.locals.store;
+    let { id } = req.params;
+    id = parseInt(id, 10);
     if (req.session.flash) {
       res.render('manage-list', {
         todoList: targetList,
         flash: req.session.flash,
       });
     } else {
-      targetList.addToDo(req.body.todoTitle);
+      store.addToDo(id, req.body.todoTitle);
+      let todoList = store.getTargetList(req.params.id);
+      let todos = store.sortTodos(todoList.todos);
+      let todoInfo = {
+        isDone: store.isDoneTodoList(todoList),
+        size: todos.length
+      }
       res.render('manage-list', {
-        todoList: targetList,
-        todos: targetList.todos,
+        todoList,
+        todos,
+        todoInfo
       });
     }
   }
 );
 
 app.post('/lists/:listID/todos/:todoID/toggle', (req, res) => {
-  let targetList = getTargetList(req.session.todoLists, req.params.listID);
-  let targetTodo = targetList.findById(Number(req.params.todoID));
+  let store = res.locals.store;
+  let { listID, todoID } = req.params;
 
-  if (targetTodo.isDone()) {
-    targetTodo.markNotDone();
-  } else {
-    targetTodo.markDone();
-  }
+  listID = Number.parseInt(listID, 10);
+  todoID = Number.parseInt(todoID, 10);
+
+  store.toggleTodoDone(listID, todoID);
 
   res.redirect(`/lists/${req.params.listID}`);
 });
 
 app.post('/lists/:listID/complete_all', (req, res) => {
-  let targetList = getTargetList(req.session.todoLists, req.params.listID);
+  let store = res.locals.store;
+  let { listID } = req.params;
 
-  targetList.markAllDone();
+  listID = Number.parseInt(listID, 10);
 
-  res.redirect(`/lists/${req.params.listID}`);
+  store.markAllDone(listID);
+
+  res.redirect(`/lists/${listID}`);
 });
 
 app.post('/lists/:listID/edit',
@@ -218,33 +208,29 @@ app.post('/lists/:listID/edit',
       .bail()
       .isLength({ max: 100 })
       .withMessage("Title must not be longer than 100 characters")
-      .custom((title, { req }) => {
-        let duplicate = req.session.todoLists
-                .find(todo => todo.title.toLowerCase() === title.toLowerCase());
-                
-        return duplicate === undefined;
-      })
-      .withMessage("Title must be unique")
   ],
   (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       errors.errors.forEach(error => req.flash("error", error.msg));
+    } else if (res.locals.store.existsTodoListTitle(req.body.todoListTitle)) {
+      req.flash("error", "Title must be unique");
     }
 
     next();
   },
   (req, res) => {
-    let targetList = getTargetList(req.session.todoLists, req.params.listID);
+    let store = res.locals.store;
+    let { listID } = req.params;
+    let todoList = store.getTargetList(listID);
     
     if (req.session.flash) {
       res.render('edit-list', {
         flash: req.session.flash,
-        todoList: targetList
+        todoList
       });
     } else {
-      let targetList = getTargetList(req.session.todoLists, req.params.listID);
-      targetList.setTitle(req.body.todoListTitle);
+      store.setListTitle(+listID, req.body.todoListTitle);
       req.flash("Success", "List edited");
       res.redirect("/lists");
     }
@@ -252,22 +238,26 @@ app.post('/lists/:listID/edit',
 );
 
 app.post('/lists/:listID/destroy', (req, res) => {
-  let targetList = getTargetList(req.session.todoLists, req.params.listID);
-  let removalIdx = req.session.todoLists.indexOf(targetList);
+  let store = res.locals.store;
+  let { listID } = req.params;
+
+  listID = Number.parseInt(listID, 10);
   
-  req.session.todoLists.splice(removalIdx, 1);
+  store.destroyList(listID);
 
   res.redirect('/lists');
 });
 
 app.post('/lists/:listID/todos/:todoID/destroy', (req, res) => {
-  let targetList = getTargetList(req.session.todoLists, req.params.listID);
-  let targetTodo = targetList.findById(Number(req.params.todoID));
-  let todoIndex = targetList.findIndexOf(targetTodo);
+  let store = res.locals.store;
+  let { listID, todoID } = req.params;
 
-  targetList.removeAt(todoIndex);
+  listID = Number.parseInt(listID, 10);
+  todoID = Number.parseInt(todoID, 10);
 
-  res.redirect(`/lists/${req.params.listID}`);
+  store.destroyTodo(listID, todoID);
+
+  res.redirect(`/lists/${listID}`);
 });
 
 //===================================================================RUN SERVER
