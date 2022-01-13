@@ -9,7 +9,8 @@ const { body, validationResult } = require('express-validator');
 const morgan = require('morgan');
 const session = require('express-session');
 const store = require('connect-loki');
-const { SessionPersistence } = require('./lib/SessionPersistence');
+const { PgPersistence } = require('./lib/PgPersistence');
+const { catchError } = require('./lib/catch-error');
 
 //====================================================================APP LOGIC
 const app = express();
@@ -38,7 +39,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use(flash());
 //Create a new datastore
 app.use((req, res, next) => {
-  res.locals.store = new SessionPersistence(req.session);
+  res.locals.store = new PgPersistence(req.session);
   next();
 });
 app.use((req, res, next) => {
@@ -52,41 +53,48 @@ app.get('/', (req, res) => {
   res.redirect('/lists');
 });
 
-app.get('/lists', (req, res) => {
-  let store = res.locals.store;
-  let todoLists = store.sortToDoLists();
-
-  let todosInfo = todoLists.map(todoList => ({
-    countAllTodos: todoList.todos.length,
-    countDoneTodos: todoList.todos.filter(todo => todo.done).length,
-    isDone: store.isDoneTodoList(todoList),
-  }));
-
-  res.render('lists', {
-    todoLists,
-    todosInfo,
-  });
-});
+app.get('/lists',
+  catchError(async (req, res) => {
+    let store = res.locals.store;
+    let todoLists = await store.getAllTodoLists();
+  
+    todoLists = store.sortLists(todoLists)
+  
+    let todosInfo = todoLists.map(list => ({
+      countAllTodos: list.todos.length,
+      countDoneTodos: list.todos.filter(todo => todo.done).length,
+      isDone: store.isListDone(list)
+    }));
+  
+    res.render('lists', {
+      todoLists,
+      todosInfo,
+    });
+  })
+);
 
 app.get('/lists/new', (req, res) => {
   res.render('new-list', { todoListTitle: "" });
 });
 
-app.get('/lists/:id', (req, res) => {
-  let store = res.locals.store;
-  let todoList = store.getTargetList(req.params.id);
-  let todos = store.sortTodos(todoList.todos);
-  let todoInfo = {
-    isDone: store.isDoneTodoList(todoList),
-    size: todos.length
-  }
-
-  res.render('manage-list', {
-    todoList,
-    todos,
-    todoInfo
-  });
-});
+app.get('/lists/:id', 
+  catchError(async (req, res) => {
+    let store = res.locals.store;
+    let { id } = req.params;
+    let todoList = await store.getTodoList(id);
+    let todos = store.sortTodos(todoList.todos);
+    let todoInfo = {
+      isDone: store.isListDone(todoList),
+      size: todos.length
+    }
+  
+    res.render('manage-list', {
+      todoList,
+      todos,
+      todoInfo
+    });
+  })
+);
 
 app.get('/lists/:listID/edit', (req, res) => {
   let store = res.locals.store;
@@ -256,6 +264,21 @@ app.post('/lists/:listID/todos/:todoID/destroy', (req, res) => {
 
   res.redirect(`/lists/${listID}`);
 });
+
+//Handle unrecognized paths
+app.use((req, res, next) => {
+  res.status(404);
+  res.send("404 page not found");
+  res.end();
+});
+
+//Handle internal errors
+app.use((err, req, res, next) => {
+  res.status(500);
+  res.send("Internal server error");
+  console.log(err);
+  res.end();
+})
 
 //===================================================================RUN SERVER
 app.listen(PORT, HOST, () => {
