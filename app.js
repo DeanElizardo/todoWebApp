@@ -96,14 +96,16 @@ app.get('/lists/:id',
   })
 );
 
-app.get('/lists/:listID/edit', (req, res) => {
-  let store = res.locals.store;
-  let { listID } = req.params;
-  let todoList = store.getTargetList(listID);
-  res.render('edit-list', {
-    todoList,
-  });
-});
+app.get('/lists/:listID/edit', 
+  catchError(async (req, res) => {
+    let store = res.locals.store;
+    let { listID } = req.params;
+    let todoList = await store.getTodoList(listID);
+    res.render('edit-list', {
+      todoList,
+    });
+  })
+);
 
 //=========================================================================POST
 app.post('/lists',
@@ -120,35 +122,35 @@ app.post('/lists',
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       errors.errors.forEach(error => req.flash("error", error.msg));
-    } else if (res.locals.store.existsTodoListTitle(req.body.todoListTitle)) {
-      req.flash("error", "Title must be unique");
     }
 
     next();
   },
-  // catchError(async (req, res, next) => {
-  //   if (await res.locals.store.duplicateTitleExists()) {
-  //     req.flash("error", "List titles must be unique");
-  //   }
+  catchError(async (req, res, next) => {
+    if (await res.locals.store.duplicateTitleExists(req.body.todoListTitle)) {
+      req.flash("error", "List titles must be unique");
+    }
 
-  //   next();
-  // }),
-  (req, res) => {
+    next();
+  }),
+  catchError(async (req, res) => {
     let store = res.locals.store; 
     let title = req.body.todoListTitle;
+
     if (req.session.flash) {
       res.render('new-list', {
         flash: req.session.flash,
         todoListTitle: title,
       });
     } else {
-      store.addTodoList(title);
+      await store.addTodoList(title);
       req.flash("Success", "New list added");
       res.redirect("/lists");
     }
-  });
+  })
+ );
 
-app.post('/lists/:id/todos',
+app.post('/lists/:listID/todos',
   [
     body('todoTitle')
       .trim()
@@ -164,30 +166,20 @@ app.post('/lists/:id/todos',
 
     next();
   },
-  (req, res) => {
+  catchError(async (req, res) => {
     let store = res.locals.store;
-    let { id } = req.params;
-    id = parseInt(id, 10);
+    let { listID } = req.params;
+
     if (req.session.flash) {
       res.render('manage-list', {
         todoList: targetList,
         flash: req.session.flash,
       });
     } else {
-      store.addToDo(id, req.body.todoTitle);
-      let todoList = store.getTargetList(req.params.id);
-      let todos = store.sortTodos(todoList.todos);
-      let todoInfo = {
-        isDone: store.isDoneTodoList(todoList),
-        size: todos.length
-      }
-      res.render('manage-list', {
-        todoList,
-        todos,
-        todoInfo
-      });
+      await store.addToDo(listID, req.body.todoTitle);
+      res.redirect(`/lists/${listID}`)
     }
-  }
+  })
 );
 
 app.post('/lists/:listID/todos/:todoID/toggle',
@@ -226,28 +218,38 @@ app.post('/lists/:listID/edit',
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       errors.errors.forEach(error => req.flash("error", error.msg));
-    } else if (res.locals.store.existsTodoListTitle(req.body.todoListTitle)) {
-      req.flash("error", "Title must be unique");
     }
 
     next();
   },
-  (req, res) => {
+  catchError(async (req, res, next) => {
+    if (await res.locals.store.duplicateTitleExists(req.body.todoListTitle)) {
+      req.flash("error", "List titles must be unique");
+    }
+
+    next();
+  }),
+  catchError(async (req, res) => {
     let store = res.locals.store;
     let { listID } = req.params;
-    let todoList = store.getTargetList(listID);
+    let { todoListTitle } = req.body;
+    
+    //induce error
+    store.setListTitle(listID, todoListTitle)
     
     if (req.session.flash) {
+      let todoList = await store.getTodoList(listID);
+
       res.render('edit-list', {
         flash: req.session.flash,
         todoList
       });
     } else {
-      store.setListTitle(+listID, req.body.todoListTitle);
+      store.setListTitle(listID, todoListTitle);
       req.flash("Success", "List edited");
       res.redirect("/lists");
     }
-  }
+  })
 );
 
 app.post('/lists/:listID/destroy', (req, res) => {
