@@ -87,7 +87,7 @@ app.get('/lists/:id',
       isDone: store.isListDone(todoList),
       size: todos.length
     }
-  
+    
     res.render('manage-list', {
       todoList,
       todos,
@@ -124,6 +124,13 @@ app.post('/lists',
 
     next();
   },
+  // catchError(async (req, res, next) => {
+  //   if (await res.locals.store.duplicateTitleExists()) {
+  //     req.flash("error", "List titles must be unique");
+  //   }
+
+  //   next();
+  // }),
   (req, res) => {
     let store = res.locals.store; 
     let title = req.body.todoListTitle;
@@ -181,17 +188,16 @@ app.post('/lists/:id/todos',
   }
 );
 
-app.post('/lists/:listID/todos/:todoID/toggle', (req, res) => {
-  let store = res.locals.store;
-  let { listID, todoID } = req.params;
+app.post('/lists/:listID/todos/:todoID/toggle',
+  catchError(async (req, res) => {
+    let store = res.locals.store;
+    let { listID, todoID } = req.params;
+  
+    await store.toggleTodoDone(listID, todoID);
 
-  listID = Number.parseInt(listID, 10);
-  todoID = Number.parseInt(todoID, 10);
-
-  store.toggleTodoDone(listID, todoID);
-
-  res.redirect(`/lists/${req.params.listID}`);
-});
+    res.redirect(`/lists/${listID}`);
+  })
+)
 
 app.post('/lists/:listID/complete_all', (req, res) => {
   let store = res.locals.store;
