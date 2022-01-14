@@ -201,16 +201,16 @@ app.post('/lists/:listID/todos/:todoID/toggle',
   })
 )
 
-app.post('/lists/:listID/complete_all', (req, res) => {
-  let store = res.locals.store;
-  let { listID } = req.params;
-
-  listID = Number.parseInt(listID, 10);
-
-  store.markAllDone(listID);
-
-  res.redirect(`/lists/${listID}`);
-});
+app.post('/lists/:listID/complete_all',
+  catchError(async (req, res) => {
+    let store = res.locals.store;
+    let { listID } = req.params;
+  
+    store.markAllDone(listID);
+  
+    res.redirect(`/lists/${listID}`);
+  })
+);
 
 app.post('/lists/:listID/edit',
   [
