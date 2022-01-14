@@ -120,6 +120,8 @@ app.post('/lists',
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       errors.errors.forEach(error => req.flash("error", error.msg));
+    } else if (res.locals.store.existsTodoListTitle(req.body.todoListTitle)) {
+      req.flash("error", "Title must be unique");
     }
 
     next();
@@ -252,24 +254,21 @@ app.post('/lists/:listID/destroy', (req, res) => {
   let store = res.locals.store;
   let { listID } = req.params;
 
-  listID = Number.parseInt(listID, 10);
-  
   store.destroyList(listID);
 
   res.redirect('/lists');
 });
 
-app.post('/lists/:listID/todos/:todoID/destroy', (req, res) => {
-  let store = res.locals.store;
-  let { listID, todoID } = req.params;
+app.post('/lists/:listID/todos/:todoID/destroy', 
+  catchError(async (req, res) => {
+    let store = res.locals.store;
+    let { listID, todoID } = req.params;
 
-  listID = Number.parseInt(listID, 10);
-  todoID = Number.parseInt(todoID, 10);
-
-  store.destroyTodo(listID, todoID);
-
-  res.redirect(`/lists/${listID}`);
-});
+    await store.destroyTodo(listID, todoID);
+  
+    res.redirect(`/lists/${listID}`);
+  })
+);
 
 //Handle unrecognized paths
 app.use((req, res, next) => {
