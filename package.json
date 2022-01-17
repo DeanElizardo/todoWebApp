@@ -6,7 +6,8 @@
   "scripts": {
     "start": "clear && npx nodemon app.js",
     "debug": "clear && npx nodemon --inspect=0.0.0.0:9229 lists.js",
-    "test": "node ./lib/seed-data.js"
+    "test": "node ./lib/seed-data.js",
+    "heroku-postbuild": "npm install --production"
   },
   "repository": {
     "type": "git",
@@ -30,6 +31,10 @@
     "morgan": "^1.10.0",
     "pg": "^8.7.1",
     "pug": "^3.0.2"
+  },
+  "engines": {
+    "node": "17.3.0",
+    "npm": "8.3.1"
   },
   "devDependencies": {
     "nodemon": "^2.0.15"
