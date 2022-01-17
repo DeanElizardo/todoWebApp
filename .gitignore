@@ -2,3 +2,5 @@ node_modules
 session-store.db
 .vscode/*
 .env
+schema.sql
+users.sql
