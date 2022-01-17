@@ -1,7 +1,3 @@
-//================================================================CONFIGURATION
-const HOST = '127.0.0.1';
-const PORT = 3000;
-
 //======================================================================MODULES
 const express = require('express');
 const flash = require('express-flash');
@@ -11,6 +7,11 @@ const session = require('express-session');
 const store = require('connect-loki');
 const { PgPersistence } = require('./lib/PgPersistence');
 const { catchError } = require('./lib/catch-error');
+const config = require('./lib/config');
+
+//================================================================CONFIGURATION
+const HOST = config.HOST;
+const PORT = config.PORT;
 
 //====================================================================APP LOGIC
 const app = express();
@@ -31,7 +32,7 @@ app.use(session({
   name: "Launch-school-todos-session-id",
   resave: false,
   saveUninitialized: true,
-  secret: "Here's an insecure secret",
+  secret: config.SECRET,
   store: new LokiStore({}),
 }));
 app.use(express.static('public'));
