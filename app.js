@@ -20,7 +20,7 @@ app.set('view engine', 'pug');
 app.set('views', './views');
 
 //============================================================GLOBAL MIDDLEWARE
-app.use(morgan("dev")); //!Switch to "common" when done with project
+app.use(morgan("common"));
 app.use(session({
   cookie: {
     httpOnly: true,
@@ -43,20 +43,75 @@ app.use((req, res, next) => {
   next();
 });
 app.use((req, res, next) => {
+  res.locals.username = req.session.username;
+  res.locals.signedIn = req.session.signedIn;
   res.locals.flash = req.session.flash;
   delete req.session.flash;
   next();
 });
 //=======================================================================ROUTES
-//==========================================================================GET
+//----------------------------------------------------user authentication------
 app.get('/', (req, res) => {
-  res.redirect('/lists');
+  res.redirect('/users/signin');
 });
 
+app.get('/users/signin', (req, res) => {
+  // res.locals.store._encryptAllPasswords();
+  req.flash('info', 'Please sign in.');
+  res.render('signin', {
+    flash: req.session.flash
+  });
+});
+
+app.post('/users/signin',
+async (req, res) => {
+  let username = req.body.username;
+  let password = req.body.password;
+  let store = res.locals.store;
+  let signedIn = false;
+
+  if (username.length > 0 && password.length > 0) {
+    signedIn = await store.validateCredentials(username, password);
+  }
+
+  if (!signedIn) {
+    req.flash('error', 'Invalid credentials');
+    res.render('signin', {
+      flash: req.session.flash,
+      username: req.body.username
+    });
+  } else {
+    req.session.username = username;
+    req.session.signedIn = signedIn;
+    req.flash("Success", "Welcome!");
+    res.redirect('/lists');      
+  }
+});
+
+app.use((req, res, next) => {
+  if (req.session.signedIn) {
+    next();
+  } else {
+    res.redirect('/users/signin');
+  }
+});
+
+app.post('/users/signout', (req, res) => {
+  req.session.username = null;
+  req.session.signedIn = false;
+  res.locals.username = null;
+  res.locals.signedIn = false;
+
+  res.redirect('/users/signin');
+ }
+);
+
+//--------------------------------------------------------list management------
 app.get('/lists',
   catchError(async (req, res) => {
     let store = res.locals.store;
-    let todoLists = await store.getAllTodoLists();
+    let uname = req.session.username;
+    let todoLists = await store.getAllTodoLists(uname);
   
     todoLists = store.sortLists(todoLists)
   
@@ -80,8 +135,9 @@ app.get('/lists/new', (req, res) => {
 app.get('/lists/:id', 
   catchError(async (req, res) => {
     let store = res.locals.store;
+    let uname = req.session.username;
     let { id } = req.params;
-    let todoList = await store.getTodoList(id);
+    let todoList = await store.getTodoList(id, uname);
     let todos = store.sortTodos(todoList.todos);
     let todoInfo = {
       isDone: store.isListDone(todoList),
@@ -99,15 +155,15 @@ app.get('/lists/:id',
 app.get('/lists/:listID/edit', 
   catchError(async (req, res) => {
     let store = res.locals.store;
+    let uname = req.session.username;
     let { listID } = req.params;
-    let todoList = await store.getTodoList(listID);
+    let todoList = await store.getTodoList(listID, uname);
     res.render('edit-list', {
       todoList,
     });
   })
 );
 
-//=========================================================================POST
 app.post('/lists',
   [
     body("todoListTitle")
@@ -127,7 +183,9 @@ app.post('/lists',
     next();
   },
   catchError(async (req, res, next) => {
-    if (await res.locals.store.duplicateTitleExists(req.body.todoListTitle)) {
+    let title = req.body.todoListTitle;
+    let uname = req.session.username;
+    if (await res.locals.store.duplicateTitleExists(title, uname)) {
       req.flash("error", "List titles must be unique");
     }
 
@@ -136,6 +194,7 @@ app.post('/lists',
   catchError(async (req, res) => {
     let store = res.locals.store; 
     let title = req.body.todoListTitle;
+    let uname = req.session.username;
 
     if (req.session.flash) {
       res.render('new-list', {
@@ -143,7 +202,7 @@ app.post('/lists',
         todoListTitle: title,
       });
     } else {
-      await store.addTodoList(title);
+      await store.addTodoList(title, uname);
       req.flash("Success", "New list added");
       res.redirect("/lists");
     }
@@ -168,6 +227,8 @@ app.post('/lists/:listID/todos',
   },
   catchError(async (req, res) => {
     let store = res.locals.store;
+    let uname = req.session.username;
+    let title = req.body.todoTitle;
     let { listID } = req.params;
 
     if (req.session.flash) {
@@ -176,7 +237,7 @@ app.post('/lists/:listID/todos',
         flash: req.session.flash,
       });
     } else {
-      await store.addToDo(listID, req.body.todoTitle);
+      await store.addToDo(listID, title, uname);
       res.redirect(`/lists/${listID}`)
     }
   })
@@ -185,9 +246,10 @@ app.post('/lists/:listID/todos',
 app.post('/lists/:listID/todos/:todoID/toggle',
   catchError(async (req, res) => {
     let store = res.locals.store;
+    let uname = req.session.username;
     let { listID, todoID } = req.params;
   
-    await store.toggleTodoDone(listID, todoID);
+    await store.toggleTodoDone(listID, todoID, uname);
 
     res.redirect(`/lists/${listID}`);
   })
@@ -196,9 +258,10 @@ app.post('/lists/:listID/todos/:todoID/toggle',
 app.post('/lists/:listID/complete_all',
   catchError(async (req, res) => {
     let store = res.locals.store;
+    let uname = req.session.username;
     let { listID } = req.params;
   
-    store.markAllDone(listID);
+    store.markAllDone(listID, uname);
   
     res.redirect(`/lists/${listID}`);
   })
@@ -223,7 +286,10 @@ app.post('/lists/:listID/edit',
     next();
   },
   catchError(async (req, res, next) => {
-    if (await res.locals.store.duplicateTitleExists(req.body.todoListTitle)) {
+    let title = req.body.todoListTitle;
+    let uname = req.session.username;
+    let store = res.locals.store;
+    if (await store.duplicateTitleExists(title, uname)) {
       req.flash("error", "List titles must be unique");
     }
 
@@ -231,21 +297,19 @@ app.post('/lists/:listID/edit',
   }),
   catchError(async (req, res) => {
     let store = res.locals.store;
+    let uname = req.session.username;
     let { listID } = req.params;
     let { todoListTitle } = req.body;
     
-    //induce error
-    store.setListTitle(listID, todoListTitle)
-    
     if (req.session.flash) {
-      let todoList = await store.getTodoList(listID);
+      let todoList = await store.getTodoList(listID, uname);
 
       res.render('edit-list', {
         flash: req.session.flash,
         todoList
       });
     } else {
-      store.setListTitle(listID, todoListTitle);
+      store.setListTitle(listID, todoListTitle, uname);
       req.flash("Success", "List edited");
       res.redirect("/lists");
     }
@@ -254,9 +318,10 @@ app.post('/lists/:listID/edit',
 
 app.post('/lists/:listID/destroy', (req, res) => {
   let store = res.locals.store;
+  let uname = req.session.username;
   let { listID } = req.params;
 
-  store.destroyList(listID);
+  store.destroyList(listID, uname);
 
   res.redirect('/lists');
 });
@@ -264,9 +329,10 @@ app.post('/lists/:listID/destroy', (req, res) => {
 app.post('/lists/:listID/todos/:todoID/destroy', 
   catchError(async (req, res) => {
     let store = res.locals.store;
+    let uname = req.session.username;
     let { listID, todoID } = req.params;
 
-    await store.destroyTodo(listID, todoID);
+    await store.destroyTodo(listID, todoID, uname);
   
     res.redirect(`/lists/${listID}`);
   })
