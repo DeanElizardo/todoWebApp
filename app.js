@@ -7,7 +7,7 @@ const session = require('express-session');
 const store = require('connect-loki');
 const { PgPersistence } = require('./lib/PgPersistence');
 const { catchError } = require('./lib/catch-error');
-const config = require('./lib/config');
+const { config } = require('./lib/config.js');
 
 //================================================================CONFIGURATION
 const HOST = config.HOST;
