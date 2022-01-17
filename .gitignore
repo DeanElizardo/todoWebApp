@@ -1,3 +1,5 @@
 node_modules
 session-store.db
 .vscode/*
+lib/seed-data.sql
+
